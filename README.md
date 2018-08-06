@@ -14,8 +14,8 @@ Text identification with Stroke Width Transform
 ### Configuration
 | key                          | Description                          | Type  |
 | -----------------------------|--------------------------------------| ------|
-| input                        | path to the input image              | str   |
-| save                         | enable save result to output folder  | bool  |
+| input                        | input file path                      | str   |
+| save                         | enables the saving of documents in the specified folder in output  | bool  |
 | output                       | output folder                        | str   |
 | dark_on_light                | text is dark on light background     | bool  |
 | deskew                       | deskew configuration                 | Object|
