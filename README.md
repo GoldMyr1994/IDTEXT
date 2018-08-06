@@ -20,7 +20,6 @@ Text identification with Stroke Width Transform
 | dark_on_light                | text is dark on light background     | bool  |
 | deskew                       | deskew configuration                 | Object|
 | letters                      | letters configuration                | Object|
-| letters_union_vertically     | letters vertical union configuration | Object|
 | words                        | words configuration                  | Object|
 
 #### Deskew Configuration
@@ -29,7 +28,7 @@ Text identification with Stroke Width Transform
 | key           | Description                                                         | Type          |
 | --------------|---------------------------------------------------------------------| --------------|
 | enable        | enable skew correction                                              | bool          |
-| threshold     | threshold used to fing peaks in hough space, null for auto threshold| int or null   |
+| threshold     | threshold used to find peaks in Hough space, null for auto threshold| int or null   |
 
 #### Letters Configuration
 | key                    | Description                                                      | Type    |
