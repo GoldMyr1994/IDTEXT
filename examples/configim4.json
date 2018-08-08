@@ -1,8 +1,8 @@
 {
 
-    "input" : "./images/im4.jpg",
+    "input" : "./examples/images/im4.jpg",
     "save": true,
-    "output" : "./result4",
+    "output" : "./examples/result4",
     "dark_on_light" : true,
     
     "deskew": {
