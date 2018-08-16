@@ -53,13 +53,19 @@ Text identification with Stroke Width Transform
 | height_scale        | the maximum vertical distance between two letters of the same word must be less than the hight of the highest letter multiplied by width_scale                                                         | float   |
 
 ### How to run
+create your config.json and run
 ```
 python textid.py config.json
 ```
 some examples with the respective configuration files are available in the examples folder
+```
+python textid.py ecamples/configim1.json
+```
 
 
-## Authors
+## Author
 
 * **Mauro Conte** - [GoldMyr1994](https://github.com/GoldMyr1994)
 
+## References
+ - **Detecting Text in Natural Scenes with Stroke Width Transform** *by Boris Epshtein, Eyal Ofek and Yonatan Wexler*
