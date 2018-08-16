@@ -1,4 +1,4 @@
-# TexTID
+# IDTEXT
 Text identification with Stroke Width Transform
 
 ## Getting Started
@@ -55,11 +55,11 @@ Text identification with Stroke Width Transform
 ### How to run
 create your config.json and run
 ```
-python textid.py config.json
+python idtext.py config.json
 ```
 some examples with the respective configuration files are available in the examples folder
 ```
-python textid.py ecamples/configim1.json
+python idtext.py ecamples/configim1.json
 ```
 
 
