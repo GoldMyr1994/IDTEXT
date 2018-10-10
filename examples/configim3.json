@@ -3,13 +3,10 @@
     "input" : "./examples/images/im3.jpg",
     "save": true,
     "output" : "./examples/result3",
-    "dark_on_light" : true,
+    "deskew": true,
+    "swt_skip_edges": false,
+    "dark_on_light": true,
     
-    "deskew": {
-        "enable": true,
-        "threshold": 100
-    },
-  
     "letters":{
         "min_width" : 1,
         "min_height" : 1,
@@ -20,13 +17,12 @@
         "min_diag_mswt_ratio" : 3.0,
         "max_diag_mswt_ratio" : 21.0
     },
-
+    
     "words": {
-        "thresh_pairs_y" : 4,
+        "thresh_pairs_y" : 5,
         "thresh_mswt" : 5,
         "thresh_height" : 20,
-        "width_scale": 1.5,
-        "height_scale": 1.0
+        "width_scale": 2.0
     }
   
 }

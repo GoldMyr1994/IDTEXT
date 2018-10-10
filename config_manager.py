@@ -35,18 +35,12 @@ class Config(_Config):
         self.input = None
         self.save= None
         self.output = None
-        self.dark_on_light = None
         self.deskew = None
         self.letters = None
-        self.letters_union_vertically = None
         self.words = None
+        self.dark_on_light = None
+        self.swt_skip_edges = None
         super(Config, self).__init__(depth, **data)
-
-class DeskewConfig(_Config):
-    def __init__(self, depth=0, **data):
-        self.enable = None
-        self.thresh_hough_peaks = None
-        super(DeskewConfig, self).__init__(depth, **data)
 
 class LettersConfig(_Config):
     def __init__(self, depth=0, **data):
@@ -66,5 +60,5 @@ class WordsConfig(_Config):
         self.thresh_mswt = None
         self.thresh_height = None
         self.width_scale = None
-        self.height_scale = None
         super(WordsConfig, self).__init__(depth, **data)
+

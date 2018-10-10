@@ -1,20 +1,20 @@
-
-from config_manager import Config
-
-from skimage.transform import hough_line
-from skimage.transform import hough_line_peaks
-
-import cv2
-import numpy as np
-import scipy.spatial
-import json
-
-from functools import wraps
-from time import clock
-
 import argparse
+import json
 import os
 import sys
+
+from functools import wraps
+from operator import itemgetter
+from time import clock
+
+import numpy as np
+import scipy.spatial
+
+from matplotlib import pyplot as plt
+from skimage.transform import hough_line, hough_line_peaks
+
+import cv2
+from config_manager import Config
 
 sys.setrecursionlimit(10000)
 
@@ -24,6 +24,77 @@ ERR_INPUT_NOT_EXISTS = "input image doesn't exist."
 
 MSG_TIME = '{} elapsed time: {} seconds'
 
+
+class Stroke:
+    def __init__(self, label, points, img, swt, skip_edges=False):
+
+        self.label = label
+
+        self.points = points
+
+        self.strokes_values = [swt[i,j] for i,j in points]
+
+        self.colors_values = [img[i,j] for i,j in points]
+
+        self.max_x = max(self.points, key=itemgetter(1))[1]
+        self.max_y = max(self.points, key=itemgetter(0))[0]
+        self.min_x = min(self.points, key=itemgetter(1))[1]
+        self.min_y = min(self.points, key=itemgetter(0))[0]
+
+        if skip_edges: 
+            self.max_x += 1 
+            self.max_y -= 1
+            self.min_x += 1 
+            self.min_y -= 1
+
+        self.start_point = self.min_y, self.min_x
+        self.stop_point = self.max_y, self.max_x
+        
+        self.width = float(self.max_x-self.min_x)
+        self.height = float(self.max_y-self.min_y)
+
+        self.img_w = float(img.shape[1])
+        self.img_h = float(img.shape[0])
+
+        self.diag = None
+        
+        self.mswt = None
+
+        self.dmswt_ratio = None
+
+        self.mean_swt = None
+        self.variance_swt = None
+
+        self.mean_color = None
+        self.variance_color = None
+
+        self.hw_ratio = None
+        self.wh_ratio = None
+
+        self.wW_ratio = None
+        self.hH_ratio = None
+    
+    def calc(self):
+
+        self.center = int((self.max_y+self.min_y)/2), int((self.max_x+self.min_x)/2)
+
+        self.diag = float(np.sqrt(self.width*self.width+self.height*self.height))
+        
+        self.mswt = float(np.median(self.strokes_values))
+
+        self.dmswt_ratio = float(self.diag/self.mswt)
+
+        self.mean_swt = float(np.mean(self.strokes_values))
+        self.variance_swt = float(np.var(self.strokes_values))
+
+        self.mean_color = float(np.mean(self.colors_values))
+        self.variance_color = float(np.var(self.colors_values))
+
+        self.hw_ratio = float(self.height/self.width)
+        self.wh_ratio = float(self.width/self.height)
+
+        self.wW_ratio = float(self.width/self.img_w)
+        self.hH_ratio = float(self.height/self.img_h)
 
 
 def timing(f):
@@ -36,12 +107,7 @@ def timing(f):
         return result
     return wrapper
 
-# class Stroke:
-#     def __init__(self, label, points):
-#         self.label = label
-#         self.points = points
-#         self.max_x = max(self.points, key=1)
-#         self.max_y = max(self.points, key=0)
+
 
 @timing
 def skew_correction(img, edges, threshold=None, _save=False, _save_path="./"):
@@ -49,19 +115,20 @@ def skew_correction(img, edges, threshold=None, _save=False, _save_path="./"):
     h, theta, d = hough_line(edges)
     h_p, theta_p, d_p = None, None, None
     # get peaks of the HoughLinesMap
+
     if threshold is None:
         h_p, theta_p, d_p = hough_line_peaks(h, theta, d)
     else:
         h_p, theta_p, d_p = hough_line_peaks(h, theta, d, threshold=threshold)
     # get the histogram of the values ​​of the angles
-    hist, bins = np.histogram(theta_p, 720)
+    hist, bins = np.histogram(theta_p, 360)
     # the most probable angle is complementary to the skew
     c_skew = np.rad2deg((bins[np.argmax(hist)]+bins[np.argmax(hist)+1])/2)
     skew = 90-c_skew if c_skew > 0 else -c_skew-90
 
     # create a rotation matrix and rotate the image around its center
     matrix = cv2.getRotationMatrix2D((img.shape[1] / 2, img.shape[0] / 2), -skew, 1)
-    dst = cv2.warpAffine(img, matrix, (img.shape[1], img.shape[0]))
+    dst = cv2.warpAffine(img, matrix, (img.shape[1], img.shape[0]), cv2.INTER_NEAREST)
 
     if _save:
         _path_name = os.path.join(_save_path, "_skew_hough")
@@ -88,8 +155,8 @@ def skew_correction(img, edges, threshold=None, _save=False, _save_path="./"):
         cv2.imwrite(os.path.join(_path_name, "post_skew.jpg"), dst)
         cv2.imwrite(os.path.join(_path_name, "hough_lines_all.jpg"), hough_lines_all)
         cv2.imwrite(os.path.join(_path_name, "hough_lines_true.jpg"), hough_lines_true)
-
     return dst
+
 
 @timing
 def swt_transform(
@@ -97,8 +164,10 @@ def swt_transform(
         edges,
         psi=np.pi/2,
         dark_on_light=True,
+        skip_edges=False,
         _save=False,
-        _save_path="./"):
+        _save_path="./",
+        ):
 
     assert len(img.shape) is 2, ERR_INPUT_SHAPE
     assert img.dtype == np.uint8, ERR_INPUT_TYPE
@@ -137,7 +206,7 @@ def swt_transform(
             if edges[i, j]:
 
                 # candidate ray for current stroke width
-                ray = [(i, j)]
+                ray = [(i, j)] if not skip_edges else []
 
                 # prev_i, prev_j : coordinates of the previous pixel
                 # cnt : iteration counter
@@ -162,21 +231,25 @@ def swt_transform(
                         if edges[cur_i, cur_j]:
 
                             # append the last point to the candidate ray
-                            ray.append((cur_i, cur_j))
+                            if not skip_edges: 
+                                ray.append((cur_i, cur_j))
 
                             # a radius is valid if the angle of the gradient at the starting point is approximately
                             # opposite the angle of the gradient at the end point
                             v = np.abs(np.abs(ang_g[i, j] - ang_g[cur_i, cur_j]) - np.pi)
                             if v < psi:
 
+                                if len(ray)==0:# and skip_edges
+                                    break
+
                                 # the width of the current stoke is the distance between the start and end points
                                 width = np.sqrt(np.power((cur_i - i), 2) + np.power((cur_j - j), 2))
-
                                 for (_i, _j) in ray:
                                     # assign the value to each pixel of the ray if it did not have a smaller value
                                     swt[_i, _j] = min(swt[_i, _j], width)
 
                                 # add the rays to the list
+                                
                                 rays.append(ray)
                             break
                         # if the new point is not an edge then add the point to the ray
@@ -196,9 +269,8 @@ def swt_transform(
         median = np.median([swt[i, j] for (i, j) in ray])
         for (i, j) in ray:
             swt[i, j] = min(median, swt[i, j])
-
     if _save:
-        _path_name = os.path.join(_save_path, "_save")
+        _path_name = os.path.join(_save_path, "_save{}".format(dark_on_light))
         if not os.path.isdir(_path_name):
             os.mkdir(_path_name)
 
@@ -209,14 +281,25 @@ def swt_transform(
         cv2.imwrite(os.path.join(_path_name, "cos_g.jpg"), (cos_g+1)*255/2)
         cv2.imwrite(os.path.join(_path_name, "sin_x.jpg"), (cos_g+1)*255/2)
 
-    return swt
+
+        # lista = []
+        # for i in range(swt.shape[0]):
+        #     for j in range(swt.shape[1]):
+        #         if swt[i,j]<np.Infinity:
+        #             lista.append(img)
+        # plt.figure()
+
+    return np.asarray(swt)
 
 
 @timing
-def swt_segmentation(swt):
+def swt_segmentation(swt, gray_img, color_thresh=25, skip_edges=False):
+
+    assert len(gray_img.shape) is 2, ERR_INPUT_SHAPE
 
     # labels map initialized to 0
     labels = np.zeros(swt.shape, dtype=np.uint32)
+    
     # layers list
     strokes = []
 
@@ -234,6 +317,10 @@ def swt_segmentation(swt):
             # search ... for similar swt value
             if np.Infinity > swt[i, j] > 0 and labels[i, j] == 0:
 
+                #swt_mean_values = [swt[i,j]]
+                #swt_mean = swt[i,j]
+                #color_mean = gray_img[i,j]
+
                 # list of the point in the current region
                 stroke = []
                 point_list = [(i, j)]
@@ -241,47 +328,33 @@ def swt_segmentation(swt):
 
                 stroke.append((i, j))
 
-                _min_i, _min_j = i, j
-                _max_i, _max_j = i, j
-
                 while len(point_list) > 0:
                     pi, pj = point_list.pop(0)
                     for ni in range(max(pi-1, 0), min(pi+2, nr-1)):
                         for nj in range(max(pj-1, 0), min(pj+2, nc-1)):
+                            
                             if labels[ni, nj] == 0 and np.Infinity > swt[ni, nj] > 0:
-
-                                if 0.3 < swt[ni, nj]/swt[pi, pj] < 3.0 and 0.3 < swt[pi, pj]/swt[ni, nj] < 3.0:
+                                
+                                if 0.333 < swt[ni, nj]/swt[i,j] < 3.0:
+                                    # labels[ni, nj] = label
+                                    # point_list.append((ni, nj))
+                                    # stroke.append((ni, nj))
+                                    #if abs(color_mean-gray_img[i,j])<color_thresh:
+                                        
                                     labels[ni, nj] = label
                                     point_list.append((ni, nj))
-
                                     stroke.append((ni, nj))
-                                    # max and min x and y in current stroke
-                                    _min_i, _min_j = min(_min_i, ni), min(_min_j, nj)
-                                    _max_i, _max_j = max(_max_i, ni), max(_max_j, nj)
-
-                width = _max_j-_min_j
-                height = _max_i-_min_i
-                diagonal = np.sqrt(np.power(width, 2) + np.power(height, 2))
-                median = np.median([swt[e] for e in stroke])
+                                    #swt_mean_values.append(swt[ni,nj])
+                                    #color_mean = np.mean([gray_img[e] for e in stroke])
+                                    #swt_mean = np.mean(swt_mean_values)
 
                 # add new layer
-                strokes.append(
-                    (
-                        label,
-                        stroke,
-                        diagonal,
-                        median,
-                        (_min_i, _min_j),
-                        (_max_i, _max_j),
-                        width,
-                        height
-                    )
-                )
+                strokes.append(Stroke(label,stroke,gray_img,swt))
+
                 # pass to the next label and region
                 label += 1
 
     return labels, strokes
-
 
 @timing
 def swt_extract_letters(
@@ -298,36 +371,36 @@ def swt_extract_letters(
     ):
 
     letters = []
+
     for stroke in strokes:
 
-        _, _, diagonal, median, _, _, width, height = stroke
-
-        # skip the stroke if too small
-        if width < min_width or height < min_height:
+        if stroke.width < min_width: 
+            continue
+        if stroke.height < min_height: 
             continue
 
-        wh_ratio = width/height
-        hw_ratio = height/width
+        stroke.calc()
 
-        # skip the stroke if width/height is too big
-        if wh_ratio > width_height_ratio:
-            continue
+        #if stroke.variance_swt>stroke.mean_swt/2:
+        #    continue
 
-        # skip the stroke if height/width is too big
-        if hw_ratio > height_width_ratio:
+        if stroke.wh_ratio > width_height_ratio: 
             continue
-        
-        dm_ratio = diagonal/median
-        # skip the stroke if .....
-        if dm_ratio > max_diag_mswt_ratio or dm_ratio < min_diag_mswt_ratio:
+        if stroke.hw_ratio > height_width_ratio: 
             continue
-
-        # skip the stroke if .....
-        if width/swt.shape[1] > max_width or height/swt.shape[0] > max_height:
+        if stroke.dmswt_ratio < min_diag_mswt_ratio:
+            continue
+        if stroke.dmswt_ratio > max_diag_mswt_ratio: 
+            continue
+        if stroke.wW_ratio > max_width: 
+            continue
+        if stroke.hH_ratio > max_height: 
             continue
 
         letters.append(stroke)
+
     return letters
+
 
 @timing
 def swt_extract_words(
@@ -335,16 +408,19 @@ def swt_extract_words(
         thresh_pairs_y=2,
         thresh_mswt=8,
         thresh_height=8,
-        width_scale=1.5,
-        height_scale=1.0,
+        width_scale=3.0,
         _save=False,
         _save_path="./"):
 
-    stop_y_1d_list = np.asarray([[e[5][0]] for e in letters])
+    if len(letters)==0:
+        return [],[]
+    cp_letters = letters[:]
+
+    stop_y_1d_list = np.asarray([[e.stop_point[0]] for e in letters])
     tree_stop_y = scipy.spatial.KDTree(stop_y_1d_list)
     pairs_stop_y = set(tree_stop_y.query_pairs(thresh_pairs_y))
 
-    start_y_1d_list = np.asarray([[e[4][0]] for e in letters])
+    start_y_1d_list = np.asarray([[e.start_point[0]] for e in letters])
     tree_start_y = scipy.spatial.KDTree(start_y_1d_list)
     pairs_start_y = set(tree_start_y.query_pairs(thresh_pairs_y))
 
@@ -356,15 +432,13 @@ def swt_extract_words(
         id_a, id_b = pair[0], pair[1]
         letter_a, letter_b = letters[id_a], letters[id_b]
 
-        widest = max(letter_a[6], letter_b[6])
-        highest = max(letter_a[7], letter_b[7])
+        widest = max(letter_a.width, letter_b.width)
 
-        distance_x = abs(letter_a[4][1]-letter_b[4][1])
-        distance_y = abs(letter_a[4][0]-letter_b[4][0])
+        d_x = abs(letter_a.start_point[1]-letter_b.start_point[1])
 
-        if abs(letter_a[3]-letter_b[3]) < thresh_mswt:
-            if abs(letter_a[7]-letter_b[7]) < thresh_height:
-                if distance_x < widest * width_scale and distance_y < height_scale*highest:
+        if abs(letter_a.mswt-letter_b.mswt) < thresh_mswt:
+            if abs(letter_a.height-letter_b.height) < thresh_height:
+                if d_x < width_scale*widest:
                     added = False
                     for chain in chains:
                         if id_a in chain:
@@ -375,6 +449,11 @@ def swt_extract_words(
                             added = True
                     if not added:
                         chains.append({id_a, id_b})
+
+                    if letters[id_a] in cp_letters:
+                        cp_letters.remove(letters[id_a])
+                    if letters[id_b] in cp_letters:
+                        cp_letters.remove(letters[id_b])
 
     words = []
     _u = True
@@ -396,56 +475,67 @@ def swt_extract_words(
     for chain in chains:
         words.append([])
         for idx in chain:
-            words[len(words)-1].extend(letters[idx][1])
-    return words
+            words[len(words)-1].append(letters[idx])
+    
+    return words, cp_letters
 
 
-def extract_contours(element_list):
-    return [(e[4][::-1], e[5][::-1]) for e in element_list]
+def draw_strokes_contours(img, strokes, _color=(0,0,255), _size=4):
+    cp_img = img.copy()
 
+    if len(img.shape) is 2:
+        cp_img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 
-def extract_contours_from_words(words):
-    _l = []
-    for word in words:
-        x = np.asarray([point[1] for point in word])
-        y = np.asarray([point[0] for point in word])
-        _l.append(((np.min(x), np.min(y)), (np.max(x), np.max(y))))
-    return _l
+    for (p1, p2) in [(stroke.start_point[::-1], stroke.stop_point[::-1]) for stroke in strokes]:
+        cv2.rectangle(cp_img, p1, p2, _color, _size)
+    return cp_img
 
+def draw_strokes_centers(img, strokes, _radius=4, _color=(0,0,255), _size=4):
+    cp_img = img.copy()
 
-def draw_words(img, words):
+    if len(img.shape) is 2:
+        cp_img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+
+    for stroke in strokes:
+        cv2.circle(cp_img, stroke.center[::-1], _radius, _color, _size)
+    return cp_img
+
+def draw_strokes_connections(img, strokes):
     cp_img = img.copy()
     if len(img.shape) is 2:
         cp_img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 
-    for word in words:
+    for stroke in strokes:
         color = np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255)
-        for point in word:
-            cp_img[point[0], point[1]] = color
+        for point in stroke.points:
+            cp_img[point] = color
 
     return cp_img
 
+def get_stroke_from_word(word, swt, gray_img):
+    labels = []
+    point_list = []
+    for stroke in word:
+        labels.append(stroke.label)
+        point_list.extend(stroke.points)
+    s = Stroke(labels, point_list, gray_img, swt)
+    s.calc()
+    return s
 
-def draw_contours(_img, _l):
-    cp_img = _img.copy()
+def get_strokes_from_words(words, swt, gray_img):
+    strokes = []
+    for word in words:
+        strokes.append(get_stroke_from_word(word, swt, gray_img))
+    return strokes
+    
+def create_letters_edge_image(gray_img, edges, letters):
+    cpimg = np.zeros(gray_img.shape,dtype=np.uint8)
+    for l in letters:
+        for i,j in l.points:
+            if edges[i,j]:
+                cpimg[i,j] = 255 
+    return cpimg
 
-    if len(_img.shape) is 2:
-        cp_img = cv2.cvtColor(_img, cv2.COLOR_GRAY2RGB)
-
-    for (p1, p2) in _l:
-        cv2.rectangle(cp_img, p1, p2, (255, 0, 0), 2)
-    return cp_img
-
-
-def swt2png(swt):
-    png_swt = np.zeros((swt.shape[0],swt.shape[1],4))
-    for i in range(swt.shape[0]):
-        for j in range(swt.shape[1]):
-            if swt[i,j] == np.Infinity:
-                png_swt[i,j] = [0, 0, 0, 0]
-            else:
-                png_swt[i,j] = [swt[i,j], swt[i,j], swt[i,j], 255]
-    return png_swt
 
 @timing
 def main():
@@ -482,26 +572,67 @@ def main():
         gray_img = gray_img
 
     # get edges map
+    gray_img_blur = cv2.GaussianBlur(gray_img, (5, 5), 0)
+    #thresh, _ = cv2.threshold(gray_img_blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     thresh, _ = cv2.threshold(gray_img, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    edges = cv2.Canny(cv2.GaussianBlur(gray_img, (5, 5), 0), thresh/2, thresh, apertureSize=3)
+    edges = cv2.Canny(gray_img_blur, thresh/2, thresh, apertureSize=3)
 
-    # if deskew is enabled 
-    if config.deskew.enable:
-        # deskew with hough lines based method
+
+    if config.deskew:
+        # apply Stroke Width Transform
+        swt = swt_transform(
+            gray_img,
+            edges,
+            psi=np.pi/2,
+            dark_on_light=config.dark_on_light,
+            _save=config.save,
+            _save_path=config.output,
+        )
+        
+        # apply segmentation on swt ang get layers
+        _, layers = swt_segmentation(swt, gray_img )
+
+        # filters layers in letter
+        letters = swt_extract_letters(
+            gray_img,
+            layers,
+            min_width=config.letters.min_width,
+            min_height=config.letters.min_height,
+            max_width=config.letters.max_width,
+            max_height=config.letters.max_height,
+            width_height_ratio=config.letters.width_height_ratio,
+            height_width_ratio=config.letters.height_width_ratio,
+            min_diag_mswt_ratio=config.letters.min_diag_mswt_ratio,
+            max_diag_mswt_ratio=config.letters.max_diag_mswt_ratio,
+        )
+        
+        letters_image = create_letters_edge_image(gray_img, edges, letters)
+
+        if config.save:
+            cv2.imwrite("{}/pre_layers.jpg".format(config.output), draw_strokes_contours(img, layers))
+            cv2.imwrite("{}/pre_letters.jpg".format(config.output), draw_strokes_contours(img, letters))
+            cv2.imwrite("{}/deskew_points.jpg".format(config.output), letters_image)
+        
+
+
         img = skew_correction(
             img, 
-            edges, 
-            threshold=config.deskew.threshold,
+            letters_image, 
+            threshold=None,
             _save=config.save,
-            _save_path=config.output)
+        _save_path=config.output)
 
         gray_img = img.copy()
         if len(img.shape) == 3:
             gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         else:
             gray_img = gray_img
+
+        gray_img_blur = cv2.GaussianBlur(gray_img, (5, 5), 0)
+        #thresh, _ = cv2.threshold(gray_img_blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         thresh, _ = cv2.threshold(gray_img, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-        edges = cv2.Canny(cv2.GaussianBlur(gray_img, (5, 5), 0), thresh/2, thresh, apertureSize=3)
+        edges = cv2.Canny(gray_img_blur, thresh/2, thresh, apertureSize=3)
+
 
     # apply Stroke Width Transform
     swt = swt_transform(
@@ -509,16 +640,18 @@ def main():
         edges,
         psi=np.pi/2,
         dark_on_light=config.dark_on_light,
+        skip_edges=config.swt_skip_edges,
         _save=config.save,
-        _save_path=config.output
+        _save_path=config.output, 
     )
+    #swt[ gray_img>np.mean(gray_img) ] = np.Infinity
     
     # apply segmentation on swt ang get layers
-    _, layers = swt_segmentation(swt)
+    _, layers= swt_segmentation(swt, gray_img, skip_edges=config.swt_skip_edges,)
 
     # filters layers in letter
     letters = swt_extract_letters(
-        swt,
+        gray_img,
         layers,
         min_width=config.letters.min_width,
         min_height=config.letters.min_height,
@@ -529,29 +662,44 @@ def main():
         min_diag_mswt_ratio=config.letters.min_diag_mswt_ratio,
         max_diag_mswt_ratio=config.letters.max_diag_mswt_ratio,
     )
-    
+
     # union letters in words
-    words = swt_extract_words(
+    words_h, _ = swt_extract_words(
         letters,
         thresh_pairs_y=config.words.thresh_pairs_y,
         thresh_mswt=config.words.thresh_mswt,
         thresh_height=config.words.thresh_height,
         width_scale=config.words.width_scale,
-        height_scale=config.words.height_scale,
         _save=config.save,
         _save_path=config.output
     )
 
+    words_h_strokes = get_strokes_from_words(words_h, swt, gray_img)
+
+    #####
 
     if config.save:
 
+        # save swt data
         cv2.imwrite("{}/swt.jpg".format(config.output), swt)
-        cv2.imwrite("{}/swt.png".format(config.output), swt2png(swt))
-        cv2.imwrite("{}/layers.jpg".format(config.output), draw_contours(img, extract_contours(layers)))
-        cv2.imwrite("{}/letters.jpg".format(config.output), draw_contours(img, extract_contours(letters)))
-        cv2.imwrite("{}/words_connection.jpg".format(config.output), draw_words(img, words))
-        cv2.imwrite("{}/words_box.jpg".format(config.output), draw_contours(img, extract_contours_from_words(words)))
 
+        # save layers data: box, connection
+        cv2.imwrite("{}/layers.jpg".format(config.output), draw_strokes_contours(img, layers))
+        cv2.imwrite("{}/layers_connection.jpg".format(config.output), draw_strokes_connections(img, layers))
+        cv2.imwrite("{}/layers_all.jpg".format(config.output), draw_strokes_contours(draw_strokes_connections(img, layers), layers))
+       
+        # save letters data: box, connection, center
+        cv2.imwrite("{}/letters.jpg".format(config.output), draw_strokes_contours(img, letters))
+        cv2.imwrite("{}/letters_connection.jpg".format(config.output), draw_strokes_connections(img, letters))
+        cv2.imwrite("{}/letters_center.jpg".format(config.output), draw_strokes_centers(img, letters))
+        cv2.imwrite("{}/letters_all.jpg".format(config.output), draw_strokes_centers(draw_strokes_contours(draw_strokes_connections(img, letters), letters), letters))
+       
+        # save letters data: box, connection, center
+        cv2.imwrite("{}/words_box.jpg".format(config.output), draw_strokes_contours(img, words_h_strokes))
+        cv2.imwrite("{}/words_connection.jpg".format(config.output), draw_strokes_connections(img, words_h_strokes))
+        cv2.imwrite("{}/words_center.jpg".format(config.output), draw_strokes_centers(img, words_h_strokes))
+        cv2.imwrite("{}/words_all.jpg".format(config.output), draw_strokes_centers(draw_strokes_contours(draw_strokes_connections(img, words_h_strokes), words_h_strokes), words_h_strokes))
+       
 
 if __name__ == "__main__":
     main()

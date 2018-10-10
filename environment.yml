@@ -8,3 +8,4 @@ dependencies:
   - scipy
   - scikit-image
   - opencv
+  - matplotlib

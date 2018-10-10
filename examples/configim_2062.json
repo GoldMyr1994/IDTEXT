@@ -1,27 +1,28 @@
 {
 
-    "input" : "./examples/images/im5.jpg",
+    "input" : "./examples/images_icdar/IMG_2062.JPG",
     "save": true,
-    "output" : "./examples/result5",
+    "output" : "./examples/IMG_2062",
+    
     "deskew": true,
     "swt_skip_edges": false,
     "dark_on_light": false,
-    
+
     "letters":{
-        "min_width" : 1,
-        "min_height" : 1,
-        "max_width": 0.5,
-        "max_height": 0.1,
+        "min_width" : 20,
+        "min_height" : 20,
+        "max_width": 0.4,
+        "max_height": 0.4,
         "width_height_ratio" : 5.0,
         "height_width_ratio" : 5.0,
         "min_diag_mswt_ratio" : 3.0,
         "max_diag_mswt_ratio" : 21.0
     },
-    
+
     "words": {
-        "thresh_pairs_y" : 10,
-        "thresh_mswt" : 2.0,
-        "thresh_height" : 2.0,
+        "thresh_pairs_y" : 20,
+        "thresh_mswt" : 10,
+        "thresh_height" : 50,
         "width_scale": 3.0
     }
   

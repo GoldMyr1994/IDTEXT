@@ -1,28 +1,27 @@
 {
 
-    "input" : "./examples/images/im2.jpg",
+    "input" : "./examples/images/im7.jpg",
     "save": true,
-    "output" : "./examples/result2",
+    "output" : "./examples/result7",
     "deskew": true,
     "swt_skip_edges": false,
     "dark_on_light": true,
   
     "letters":{
-        "min_width" : 1,
-        "min_height" : 1,
+        "min_width" : 2,
+        "min_height" : 2,
         "max_width": 0.1,
         "max_height": 0.1,
         "width_height_ratio" : 2.0,
-        "height_width_ratio" : 4.0,
+        "height_width_ratio" : 10.0,
         "min_diag_mswt_ratio" : 3.0,
         "max_diag_mswt_ratio" : 21.0
     },
 
     "words": {
-        "thresh_pairs_y" : 5,
-        "thresh_mswt" : 5,
-        "thresh_height" : 5,
+        "thresh_pairs_y" : 4,
+        "thresh_mswt" : 10,
+        "thresh_height" : 10,
         "width_scale": 3.0
-    }
-  
+    }  
 }
