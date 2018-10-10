@@ -22,13 +22,6 @@ Text identification with Stroke Width Transform
 | letters                      | letters configuration                | Object|
 | words                        | words configuration                  | Object|
 
-#### Deskew Configuration
->This step could fail. If the threshold is too high, too few lines are found that may not correspond to the text, if too many lines are too high in addition to the text
-
-| key           | Description                                                         | Type          |
-| --------------|---------------------------------------------------------------------| --------------|
-| enable        | enable skew correction                                              | bool          |
-| threshold     | threshold used to find peaks in Hough space, null for auto threshold| int or null   |
 
 #### Letters Configuration
 | key                    | Description                                                      | Type    |
