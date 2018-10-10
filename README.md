@@ -18,7 +18,7 @@ Text identification with Stroke Width Transform
 | save                         | enables the saving of documents in the specified folder in output  | bool  |
 | output                       | output folder                        | str   |
 | dark_on_light                | text is dark on light background     | bool  |
-| deskew                       | deskew configuration                 | Object|
+| deskew                       | enable skew correction                 | bool|
 | letters                      | letters configuration                | Object|
 | words                        | words configuration                  | Object|
 
@@ -50,16 +50,15 @@ Text identification with Stroke Width Transform
 | thresh_mswt        | maximum distance allowed between the median swt of two letters of the same word  | int     |
 | thresh_height      | maximum distance allowed between the height of two letters of the same word      | int     |
 | width_scale        | the maximum horizontal distance between two letters of the same word must be less than the width of the largest letter multiplied by width_scale                                                         | float   |
-| height_scale        | the maximum vertical distance between two letters of the same word must be less than the hight of the highest letter multiplied by width_scale                                                         | float   |
 
 ### How to run
-create your config.json and run
+create yours config.json and run
 ```
 python idtext.py config.json
 ```
 some examples with the respective configuration files are available in the examples folder
 ```
-python idtext.py ecamples/configim1.json
+python idtext.py examples/configim1.json
 ```
 
 
