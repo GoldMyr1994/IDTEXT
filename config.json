@@ -1,12 +1,13 @@
 {
 
     "input" : "",
-    "save": true,
+    "save" : true,
     "output" : "",
     
     "deskew": true,
     "swt_skip_edges": false,
     "dark_on_light": true,
+    "gt":true,
 
     "letters":{
         "min_width" : 20,

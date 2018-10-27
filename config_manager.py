@@ -40,6 +40,7 @@ class Config(_Config):
         self.words = None
         self.dark_on_light = None
         self.swt_skip_edges = None
+        self.gt = False
         super(Config, self).__init__(depth, **data)
 
 class LettersConfig(_Config):

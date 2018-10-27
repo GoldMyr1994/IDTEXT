@@ -155,7 +155,7 @@ def skew_correction(img, edges, threshold=None, _save=False, _save_path="./"):
         cv2.imwrite(os.path.join(_path_name, "post_skew.jpg"), dst)
         cv2.imwrite(os.path.join(_path_name, "hough_lines_all.jpg"), hough_lines_all)
         cv2.imwrite(os.path.join(_path_name, "hough_lines_true.jpg"), hough_lines_true)
-    return dst
+    return dst, -np.deg2rad(skew)
 
 
 @timing
@@ -577,7 +577,7 @@ def main():
     thresh, _ = cv2.threshold(gray_img, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     edges = cv2.Canny(gray_img_blur, thresh/2, thresh, apertureSize=3)
 
-
+    skew = 0.
     if config.deskew:
         # apply Stroke Width Transform
         swt = swt_transform(
@@ -609,13 +609,16 @@ def main():
         letters_image = create_letters_edge_image(gray_img, edges, letters)
 
         if config.save:
+            cv2.imwrite("{}/pre_swt.jpg".format(config.output), swt)
+            cv2.imwrite("{}/pre_layers_conn.jpg".format(config.output), draw_strokes_connections(img, layers))
             cv2.imwrite("{}/pre_layers.jpg".format(config.output), draw_strokes_contours(img, layers))
             cv2.imwrite("{}/pre_letters.jpg".format(config.output), draw_strokes_contours(img, letters))
+            cv2.imwrite("{}/pre_letters_conmn.jpg".format(config.output), draw_strokes_connections(img, letters))
             cv2.imwrite("{}/deskew_points.jpg".format(config.output), letters_image)
         
 
 
-        img = skew_correction(
+        img, skew = skew_correction(
             img, 
             letters_image, 
             threshold=None,
@@ -632,7 +635,6 @@ def main():
         #thresh, _ = cv2.threshold(gray_img_blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         thresh, _ = cv2.threshold(gray_img, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         edges = cv2.Canny(gray_img_blur, thresh/2, thresh, apertureSize=3)
-
 
     # apply Stroke Width Transform
     swt = swt_transform(
@@ -675,6 +677,65 @@ def main():
     )
 
     words_h_strokes = get_strokes_from_words(words_h, swt, gray_img)
+
+
+    if config.save and config.gt:
+
+        aaa = draw_strokes_centers(draw_strokes_contours(draw_strokes_connections(img, words_h_strokes), words_h_strokes), words_h_strokes)
+        matrix = cv2.getRotationMatrix2D((img.shape[1] / 2, img.shape[0] / 2), -np.rad2deg(skew), 1)
+        dst = cv2.warpAffine(aaa, matrix, (img.shape[1], img.shape[0]), cv2.INTER_NEAREST)
+        cv2.imwrite("{}/words_all_original.jpg".format(config.output), dst)
+       
+        _txt = "" 
+        _words = words_h_strokes
+        _label = 0
+        for _w in _words:
+            
+
+            cx = ((float)(img.shape[1]))/2
+            cy = ((float)(img.shape[0]))/2
+
+            wcx = (float)(_w.center[1])
+            wcy = (float)(_w.center[0])
+
+            _corr_x = cx + (wcx-cx)*np.cos(skew)-(wcy-cy)*np.sin(skew) - wcx
+            _corr_y = cy + (wcx-cx)*np.sin(skew)+(wcy-cy)*np.cos(skew) - wcy
+
+            # print("word center x",wcx)
+            # print("word center y",wcy)
+
+            # print("displacement x",_corr_x)
+            # print("displacement y",_corr_y)
+
+            # print("minx:{} miny:{} maxx:{} maxy:{}".format(_w.min_x,_w.min_y,_w.max_x,_w.max_y))
+
+            # add o.nico to regards!!!!!!!!
+
+            if skew < -np.pi/4:
+                
+                _txt += "{} {} {} {} {} {} {} \n".format(
+                    _label,
+                    0,
+                    int((wcx+_corr_x) - abs(((_w.min_y - wcy)))),
+                    int((wcy+_corr_y) - abs(((_w.min_x - wcx)))),
+                    int(_w.height),
+                    int(_w.width),
+                    np.pi/2+skew
+                )
+            else:
+                _txt += "{} {} {} {} {} {} {} \n".format(
+                    _label,
+                    0,
+                    int(_w.min_x+_corr_x),
+                    int(_w.min_y+_corr_y),
+                    int(_w.width),
+                    int(_w.height),
+                    skew
+                    )
+            _label += 1
+
+        with open('{}/gt.gt'.format(config.output), 'w') as file:
+            file.write(_txt)            
 
     #####
 
